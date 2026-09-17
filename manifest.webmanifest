@@ -1,0 +1,17 @@
+{
+  "name": "문학 연계 노트",
+  "short_name": "문학 노트",
+  "description": "수능특강·수능완성 문학 작품 정리 노트",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f5f3",
+  "theme_color": "#f5f5f3",
+  "icons": [
+    {"src": "icons/icon-192-v2.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icons/icon-512-v2.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icons/icon-512-maskable-v2.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
