@@ -1,6 +1,6 @@
 /* 문학 연계 노트 service worker */
-const VERSION = "litnote-v3";
-const CORE = ["./", "./index.html", "./manifest.webmanifest", "./icons/apple-touch-icon.png", "./icons/icon-192-v2.png", "./icons/icon-512-v2.png", "./icons/favicon-32-v2.png"];
+const VERSION = "litnote-v4";
+const CORE = ["./", "./index.html", "./manifest.webmanifest", "./apple-touch-icon.png", "./icon-192-v2.png", "./icon-512-v2.png", "./favicon-32-v2.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(CORE)).then(() => self.skipWaiting()));
