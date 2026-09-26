@@ -10,10 +10,10 @@
 <meta name="theme-color" content="#f5f5f3">
 <title>문학 연계 노트</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-<link rel="apple-touch-icon-precomposed" sizes="180x180" href="icons/apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32-v2.png">
-<link rel="shortcut icon" href="icons/favicon-32-v2.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="apple-touch-icon-precomposed" sizes="180x180" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32-v2.png">
+<link rel="shortcut icon" href="favicon-32-v2.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;500&family=Noto+Serif+KR:wght@400;500&display=swap">
 <style id="css">
@@ -119,6 +119,8 @@ padding:18px 20px calc(20px + env(safe-area-inset-bottom))}
 .actions .danger{color:var(--rose)}
 .actions .danger.armed{background:var(--rose);border-color:var(--rose);color:#fff}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:11px;z-index:30}
+.toast button{margin-left:12px;padding:0 0 0 12px;border-left:1px solid;color:inherit;font-size:11px;font-weight:500;opacity:.85}
+.toast{max-width:calc(100vw - 32px)}.toast button{white-space:nowrap}
 .print{display:none}
 .icon{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--navy);font-size:15.5px;line-height:1;flex:none}
 .tabs.wide{display:grid;grid-template-columns:repeat(5,1fr);margin-bottom:10px}
@@ -475,7 +477,7 @@ var S=Object.assign({view:"cards",book:"all",genre:"all",q:"",cq:"",ccat:"all",i
 S.adv=Object.assign(clone(ADV0),S.adv||{});
 var GIST=Object.assign({token:"",id:"",base:0,imgSize:-1,last:0},jget(localStorage,LG)||{});
 var IMGS={},IDB=null,DIRTY=!!jget(localStorage,"litnote-dirty"),IMG_DIRTY=!!jget(localStorage,"litnote-imgdirty"),SYNC={s:GIST.token?"idle":"off",msg:""},syncing=false,syncAgain=false,syncT=null,HL=null;
-var PENDING=null,modal=null,lastType=null,toastT,draftT,LINKRE=null,LINKMAP={};
+var PENDING=null,UNDO=null,modal=null,lastType=null,toastT,draftT,LINKRE=null,LINKMAP={};
 var root=document.getElementById("root");
 
 function applyPref(){var r=document.documentElement;if(PREF.palette==="navy")r.removeAttribute("data-palette");else r.setAttribute("data-palette",PREF.palette);r.style.setProperty("--z",PREF.size)}
@@ -1344,13 +1346,16 @@ function gcImgs(){var r={},ch=false;DATA.works.forEach(function(w){(w.images||[]
  var drafts=jget(localStorage,LD);if(drafts&&drafts.images)drafts.images.forEach(function(im){if(im.id)r[im.id]=1});
  if(modal&&modal.images)modal.images.forEach(function(im){if(im.id)r[im.id]=1});
  Object.keys(IMGS).forEach(function(k){if(!r[k]){delete IMGS[k];ch=true}});return ch}
-function commit(msg){
+function commit(msg,undo){
+ if(!undo)UNDO=null;
  DATA.updated=Date.now();DATA.meta.touched=true;
  modal=null;if(gcImgs())setImgDirty(true);else if(IMG_DIRTY)setImgDirty(true);
  setDirty(true);kvSet("data",DATA).then(function(ok){if(!ok)toast("기기에 저장하지 못했어요. 저장 공간을 확인하세요")});
- render();if(msg)toast(msg);scheduleSync(1500);
+ render();if(msg)toast(msg,undo);scheduleSync(1500);
 }
-function save(msg){commit(msg)}
+function save(msg,undo){commit(msg,undo)}
+function snapUndo(){UNDO={data:clone(DATA),imgs:Object.assign({},IMGS),until:0}}
+function doUndo(){if(!UNDO||Date.now()>UNDO.until)return;var u=UNDO;UNDO=null;DATA=u.data;DATA.updated=Date.now();Object.keys(u.imgs).forEach(function(k){IMGS[k]=u.imgs[k]});kvSet("imgs",IMGS);setImgDirty(true);commit("되돌렸어요")}
 function gh(method,url,body){
  var h={"Accept":"application/vnd.github+json","Authorization":"Bearer "+GIST.token};if(body)h["Content-Type"]="application/json";
  if(method==="GET")url+=(url.indexOf("?")<0?"?":"&")+"_="+Date.now();
@@ -1395,6 +1400,7 @@ function pushAll(create,all,have){
 function syncNow(opt){
  opt=opt||{};
  if(!GIST.token){setSync("off");return Promise.resolve()}
+ if(UNDO&&Date.now()<UNDO.until){scheduleSync(UNDO.until-Date.now()+300);return Promise.resolve()}
  if(syncing){syncAgain=true;return Promise.resolve()}
  syncing=true;setSync("busy");
  var p;
@@ -1498,9 +1504,11 @@ function render(){
  document.body.style.overflow=modal?"hidden":"";
  keepUI();
 }
-function toast(msg){
+function toast(msg,undo){
  var t=document.querySelector(".toast");if(!t){t=document.createElement("div");t.className="toast";t.setAttribute("role","status");document.body.appendChild(t)}
- t.textContent=msg;clearTimeout(toastT);toastT=setTimeout(function(){t.remove()},2800);
+ clearTimeout(toastT);undo=undo&&UNDO;
+ if(undo){UNDO.until=Date.now()+5000;t.innerHTML='<span>'+esc(msg)+'</span><button type="button">되돌리기</button>';t.querySelector("button").onclick=function(){t.remove();doUndo()}}else t.textContent=msg;
+ toastT=setTimeout(function(){t.remove()},undo?5000:2800);
 }
 function move(n){var d=filtered(),ni=S.idx+n;if(ni<0||ni>=d.length)return;S.idx=ni;render();window.scrollTo(0,0)}
 function gotoWork(id){
@@ -1669,7 +1677,7 @@ root.addEventListener("click",function(ev){
   case"fav":var fw=byId(el.dataset.id);if(fw){fw.fav=!fw.fav;fw.updated=Date.now();save(fw.fav?"즐겨찾기에 추가했어요":"즐겨찾기에서 뺐어요")}break;
   case"concept":modal=newModal({type:"concept",id:el.dataset.id});render();break;
   case"cedit":openForm("cform",el.dataset.id);break;
-  case"cdel":if(modal.arm){tomb(el.dataset.id);DATA.concepts=DATA.concepts.filter(function(c){return c.id!==el.dataset.id});S.adv.concepts=S.adv.concepts.filter(function(x){return x!==el.dataset.id});save("개념을 삭제했어요")}else{modal.arm=true;render()}break;
+  case"cdel":if(modal.arm){snapUndo();tomb(el.dataset.id);DATA.concepts=DATA.concepts.filter(function(c){return c.id!==el.dataset.id});S.adv.concepts=S.adv.concepts.filter(function(x){return x!==el.dataset.id});save("개념을 삭제했어요",1)}else{modal.arm=true;render()}break;
   case"cfilter":S.adv=clone(ADV0);S.adv.concepts=[el.dataset.id];S.book="all";S.genre="all";S.view="list";modal=null;render();window.scrollTo(0,0);break;
   case"filter":modal=newModal({type:"filter"});render();break;
   case"advflag":S.adv[el.dataset.v]=!S.adv[el.dataset.v];S.idx=0;render();break;
@@ -1692,7 +1700,7 @@ root.addEventListener("click",function(ev){
    var ow=byId(el.dataset.wid),on=ow&&(ow.notes||[]).filter(function(n){return n.id===el.dataset.nid})[0];
    if(on){modal=newModal({type:"note",wid:ow.id,nid:on.id,quote:on.quote});render()}break;
   case"notedel":
-   if(modal.arm){var dnw=byId(modal.wid);if(dnw){dnw.notes=(dnw.notes||[]).filter(function(n){return n.id!==modal.nid});dnw.updated=Date.now()}save("메모를 삭제했어요")}
+   if(modal.arm){snapUndo();var dnw=byId(modal.wid);if(dnw){dnw.notes=(dnw.notes||[]).filter(function(n){return n.id!==modal.nid});dnw.updated=Date.now()}save("메모를 삭제했어요",1)}
    else{modal.arm=true;render()}break;
   case"noteloc":
    var lw=modal.wid,ln2=modal.nid,lwk=byId(lw);modal=null;
@@ -1720,7 +1728,7 @@ root.addEventListener("click",function(ev){
   case"chadd":captureChoices();modal.choices.push({no:CIRC[modal.choices.length]||String(modal.choices.length+1),verdict:"",text:"",reason:"",quote:""});render();break;
   case"chdel":captureChoices();modal.choices.splice(+el.dataset.i,1);render();queueDraft();break;
   case"chpend":captureChoices();if(PENDING){var cc2=modal.choices[+el.dataset.i];cc2.quote=PENDING.quote;cc2.start=PENDING.start}render();queueDraft();break;
-  case"qdel":if(modal.arm){var qw=byId(modal.wid);if(qw){qw.questions=(qw.questions||[]).filter(function(x){return x.id!==modal.qid});qw.updated=Date.now()}clearDraft();save("문항을 삭제했어요")}else{modal.arm=true;render()}break;
+  case"qdel":if(modal.arm){snapUndo();var qw=byId(modal.wid);if(qw){qw.questions=(qw.questions||[]).filter(function(x){return x.id!==modal.qid});qw.updated=Date.now()}clearDraft();save("문항을 삭제했어요",1)}else{modal.arm=true;render()}break;
   case"chgo":
    var cw=byId(el.dataset.wid),cq=cw&&(cw.questions||[]).filter(function(x){return x.id===el.dataset.qid})[0],cc=cq&&(cq.choices||[]).filter(function(x){return x.id===el.dataset.cid})[0];
    if(!cc)break;if(!str(cw.body).trim()){toast("본문이 없어요");break}
@@ -1730,7 +1738,7 @@ root.addEventListener("click",function(ev){
   case"bgo":S.view="bundles";S.bid=el.dataset.id;modal=null;render();window.scrollTo(0,0);break;
   case"bback":S.bid=null;render();break;
   case"bedit":modal=newModal({type:"bform",id:el.dataset.id});render();break;
-  case"bdel":if(modal.arm){tomb(modal.id);DATA.bundles=DATA.bundles.filter(function(b){return b.id!==modal.id});S.bid=null;save("묶음을 삭제했어요")}else{modal.arm=true;render()}break;
+  case"bdel":if(modal.arm){snapUndo();tomb(modal.id);DATA.bundles=DATA.bundles.filter(function(b){return b.id!==modal.id});S.bid=null;save("묶음을 삭제했어요",1)}else{modal.arm=true;render()}break;
   case"bpick":modal=newModal({type:"bpick"});render();break;
   case"btoggle":var tb=bundleById(S.bid);if(tb){k=tb.items.indexOf(el.dataset.id);if(k>-1)tb.items.splice(k,1);else tb.items.push(el.dataset.id);tb.updated=Date.now();DATA.updated=Date.now();setDirty(true);kvSet("data",DATA);scheduleSync(2000);render()}break;
   case"badd":var ab=bundleById(S.bid);if(ab&&ab.items.indexOf(el.dataset.id)<0){ab.items.push(el.dataset.id);ab.updated=Date.now();save("묶음에 넣었어요")}break;
@@ -1757,8 +1765,8 @@ root.addEventListener("click",function(ev){
   case"cmpopt":if(el.dataset.v==="hide")S.cmpHide=!S.cmpHide;else S.cmpBody=!S.cmpBody;render();break;
   case"cmpprint":setTimeout(function(){try{window.print()}catch(e){toast("이 화면에서는 인쇄를 열 수 없어요")}},50);break;
   case"del":
-   if(modal.arm){var id=el.dataset.id,dw=byId(id);tomb(id);DATA.bundles.forEach(function(b){var bi2=b.items.indexOf(id);if(bi2>-1){b.items.splice(bi2,1);b.updated=Date.now()}});
-    DATA.works=DATA.works.filter(function(w){return w.id!==id});removeLinks(id);S.cmp=S.cmp.filter(function(x){return x!==id});save("삭제했어요")}
+   if(modal.arm){snapUndo();var id=el.dataset.id,dw=byId(id);tomb(id);DATA.bundles.forEach(function(b){var bi2=b.items.indexOf(id);if(bi2>-1){b.items.splice(bi2,1);b.updated=Date.now()}});
+    DATA.works=DATA.works.filter(function(w){return w.id!==id});removeLinks(id);S.cmp=S.cmp.filter(function(x){return x!==id});save("삭제했어요",1)}
    else{modal.arm=true;render()}break;
   case"close":
    if(modal&&/^(form|cform|qform)$/.test(modal.type)&&modal.dirty){saveDraftNow();modal=null;render();toast("작성 중인 내용은 임시저장했어요")}
